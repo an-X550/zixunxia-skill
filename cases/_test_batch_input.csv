@@ -1,0 +1,4 @@
+nickname,province,subject_category,score,rank,consultation_form,major_interests,study_willingness,city_preference,financial_pressure,family_attitude,mbti,holland,excluded_majors,preferred_careers,rejected_careers,deficit_acceptance,target_school_tier,clarity_level,first_gen_college,dimension_priority,prompt0_answers
+张三,广东,物理类,580,25000,文字,工学（自动化类）,愿意读研,珠三角优先,无,支持,ISTP,RIA,土木工程,机器人工程师,销售,可接受亏分10分,双一流,比较明确,否,赚钱能力>培养计划>学校要求>深造要求>硬性要求,
+李四,四川,理科,620,8000,文字,医学（临床、口腔）,必须读研,成都或重庆优先,中等,支持读医,ISFJ,ISR,,医生,,不接受亏分,985/211,非常明确,是,学校要求>培养计划>深造要求>硬性要求>赚钱能力,
+王五,北京,不限,550,15000,语音,经济学、管理学,不确定,北京优先,无,尊重孩子选择,ENTJ,EAS,,,程序员,可接受亏分15分,,不太明确,否,赚钱能力>学校要求>深造要求>培养计划>硬性要求,

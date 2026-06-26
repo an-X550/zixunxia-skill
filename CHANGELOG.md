@@ -1,0 +1,451 @@
+# 咨询侠 Changelog
+
+> 所有值得注意的变更都会记录在此文件中。
+> 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
+> 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+---
+
+## [v2.4.0] — 2026-06-26
+
+### 🏗️ 架构升级：Goal State Agent Loop
+
+咨询中模块从「菜单式指令驱动」升级为「目标状态驱动的 Agent Loop」，基于 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的 `/goal` 模式设计理念。
+
+**核心理念变化**：不再要求咨询侠记忆 30+ 个触发词逐个点击推进，改为定义「咨询完成意味着什么」——AI 每个 turn 自主检查目标状态、决定下一步、自动推进。咨询侠只需在 3 个关键审批点确认。
+
+---
+
+### ✨ 新增
+
+#### Goal State 目标状态系统
+- **目标状态定义**：11 个结构化目标字段覆盖咨询中全流程
+  - `opening_done` → `排除排序` → `培养计划` → `学校要求` → `深造要求` → `硬性要求` → `赚钱能力` → `dimension_confirmation` → `city_guidance_done` → `school_guidance_done` → `summary_given`
+- **自动推进循环**：8 级优先级队列，每个 turn 找到第一个未完成目标 → 调 MCP → 输出话术 → 标记完成 → 继续
+- **状态条展示**：每个 turn 末尾展示 `📍 进度：培养计划 ✅ → 学校要求 🔵 → 深造要求 ⬜`
+
+#### 自动校验规则（5 条）
+- ✅ 当前节点完整输出 → 自动推进到下一目标
+- ✅ 考生提出新疑问 → 暂停维度推进，切入答疑，解答后恢复
+- ✅ 全部五维度完成 → 自动输出整体确认话术
+- ⚠️ 考生疲惫信号（连续 3 轮简短回复）→ 提示咨询侠建议加速收尾（不自动决策）
+- ⚠️ 轮次超过 20 turn → 提示咨询侠预算告警
+
+#### 人工审批点（3 个，AI 不会自动跨过）
+- 🔒 专业推荐生成后 — 咨询侠审核推荐结果
+- 🔒 五维度全部完成 → 整体确认后 — 咨询侠判断是否进入城市/院校
+- 🔒 收尾总结前 — 咨询侠确认可以收尾
+
+#### goal_state.json 持久化
+- 每位考生目录下维护结构化状态文件 `cases/{昵称}/goal_state.json`
+- 完整 JSON schema：phase / phase_history / turn_count / auto_advance / goals（三层嵌套）/ interrupted_at
+- 中断恢复：重启对话时自动定位到上次中断位置
+- 与 MD 档案双轨并存，互不替代
+
+#### 手动模式兼容指令
+- `暂停自动推进` — 切回手动菜单模式
+- `恢复自动推进` — 从当前 goal_state 继续自主推进
+- `跳过：{目标名}` — 标记目标完成但不输出话术
+
+### 🔄 变更
+
+- **咨询中「触发」行**：增加「默认自动推进模式」说明
+- **咨询中「行为」章节**：菜单式指令驱动 → Goal State 自动推进（约 70 行旧内容替换为约 140 行新内容）
+- **「全局指令」表**：新增 3 条指令 + `当前进度`/`检查遗漏`/`模块跳转`/`考生切换` 行为更新为读取 goal_state.json
+- **「自然语言推断」表**：4 处更新 + 新增 1 条暂停触发规则（「太快了」「慢一点」→ 暂停自动推进）
+- **「输出风格」第 6 条**：「下一步引导」→「状态感知」（auto_advance=true 时不提示下一步指令）
+- **SKILL.md**：1155 行 → 1302 行（+147 行）
+
+### 🛡️ 保留不动
+
+以下核心资产在本次改造中**一行未改**，确保咨询质量基线不受影响：
+- 五维度话术结构（定义→教方法→截图→核实→分析）+ 递减规则
+- 开场白模板 + 称谓规则（强制）
+- 五维度标准定义（5 段原文）
+- MCP 工具调用表（8 个工具完整）
+- 城市/院校板块话术框架
+- 答疑场景映射（7 种）
+- 收尾话术规范（通用 + 定制）
+- 人机感检测（humanizer.md）
+- 模块一（咨询前）完整
+- 模块三（咨询后）完整
+- 腾讯问卷/腾讯文档集成
+- 首次启动引导 + 建联话术
+
+### 📄 文档
+- `PROJECT_STATUS.md` — 架构新增控制流图 + 数据流更新 + 已完成功能 + 已知问题 #7 + 4 条关键决策记录
+- `UPDATES.md` — 2026-06-26 条目
+- `CHANGELOG.md` — 本文件（新建）
+
+---
+
+## [v2.6.0] — 2026-06-26
+
+### 🤖 LangGraph 批量并行分析 — 咨询前模块
+
+**咨询侠首次支持多人批量处理**：使用 LangGraph `Send` API 实现多考生并行咨询前分析。每个考生独立 StateGraph（上下文隔离），CSV/JSON 批量输入 → Prompt0 → Prompt1 → Prompt2 并行执行。直接复用 `mcp-server/db_queries.py`，LLM 预注入 SQLite 数据（不做工具调用）。产物与交互模式完全兼容。
+
+---
+
+### ✨ 新增
+
+#### LangGraph 批量模块（`batch/`，10 文件 / ~60KB）
+
+- **`config.py`** — 集中配置：DeepSeek API、路径、并发限制（默认 5）、安全上限（50）
+- **`state.py`** — LangGraph TypedDict 状态：`StudentInput` / `StudentState` / `BatchState`
+- **`data_loader.py`** — CSV/JSON 批量输入解析 + 字段校验 + Markdown profile 格式化
+- **`db_adapter.py`** — 封装 `mcp-server/db_queries.py`。不走 MCP 子进程，直接 SQLite 连接。提供 `query_school_by_major`、`query_city_industry`、`query_major_by_school`、`search_majors` 等查询
+- **`prompts.py`** — 加载 `AI提示词模板.md`，按 `# prompt0` / `# prompt1` / `# （选用）prompt2` 分割，模板化注入学生数据
+- **`output_writer.py`** — 写入 `cases/{nickname}/` 目录：MD 归档、`goal_state.json`、错误日志、批量汇总报告
+- **`nodes.py`** — 6 个 LangGraph 节点函数 + LLM 调用（DeepSeek API，120s 超时 + 指数退避重试）+ SQLite 数据预格式化 + 信息不足检测（8 类正则模式）
+- **`graph.py`** — LangGraph 双层图：BatchOrchestrator（fan-out via Send）+ StudentAgent（prompt0→prompt1→prompt2→finalize）
+- **`run_batch.py`** — CLI 入口：`--dry-run`（验证输入不调 LLM）/ `--resume`（跳过已完成考生）/ `--concurrency`（并发控制）
+
+#### 测试数据
+
+- `cases/_test_batch_input.csv` — 3 人测试集（张三 580/广东/自动化、李四 620/四川/临床、王五 550/北京/经管）
+
+### 🔄 变更
+
+**batch 模块与现有系统共存，互不干扰**：
+- 交互模式（SKILL.md 驱动）：不受影响，照常使用
+- 批量模式（`python batch/run_batch.py`）：独立运行，产物写入同一 `cases/` 目录
+- MCP Server（10 工具）：零改动
+- DOCX 导出脚本：可直接处理批量产出的 `.md` 文件
+
+**新依赖**：`langgraph>=0.2.0` + `langchain-core>=0.3.0` + `langchain-deepseek>=0.1.0`（~5MB）
+
+### 🛡️ 架构决策
+
+| 决策 | 选择 | 理由 |
+|:--|:--|:--|
+| 数据访问 | 直接 SQLite（复用 `db_queries.py`） | MCP 子进程在批量场景开销太大 |
+| Prompt 执行 | LLM + 预注入 SQLite 数据 | Prompt 推理太复杂无法硬编码；LLM 不做工具调用 |
+| 信息补问 | 批量跳过，不足标记 `followup_needed` | 批量无法做交互式 Q&A |
+| 状态隔离 | 每考生独立 StateGraph 实例 | 零上下文污染 |
+| Fan-out | LangGraph `Send` API，每考生一个 Agent | 考生内部步骤串行，无须更细粒度 |
+| 输出格式 | 与 `cases/{nickname}/` 完全一致 | DOCX/腾讯文档等下游工具无需改动 |
+| 分发方式 | 不变：zip → pip install → python run_batch.py | 不引入服务器/前端/Docker |
+
+### 📄 文档
+
+- `batch/` — 全部新建（10 文件）
+- `cases/_test_batch_input.csv` — 新建
+- `PROJECT_STATUS.md` — 架构新增批量模式数据流图 + 计划中 + 版本号
+- `UPDATES.md` — 任务条目
+- `CHANGELOG.md` — 本条目
+- `CLAUDE.md` — 版本号 v2.5.0→v2.6.0 + LangGraph 计划引用 + 边界规则 #4 更新
+
+---
+
+## [v2.5.0] — 2026-06-26
+
+### 🗄️ SQLite 数据库 + 院校-专业双向关联查询
+
+**本次对话完成的最大架构升级**：从现有 6 个知识库 Markdown 文件构建 SQLite 数据库，新增 2 个 MCP 工具实现专业↔院校双向关联查询。这是咨询侠首次具备"根据专业反向查全国哪些院校是强校"的结构化查询能力。
+
+同时发现并修正了一个文档错误：`撑伞侠知识库.db`（41364 行 rel_school_major 表）实际不存在，已从所有文档中移除该虚假前提。
+
+---
+
+### ✨ 新增
+
+#### 一、SQLite 数据库 — `撑伞侠知识库.db`
+
+**构建脚本**：[mcp-server/build_sqlite.py](mcp-server/build_sqlite.py)（~370 行）
+- 复用现有 6 个 Markdown 解析器，将解析结果 INSERT 到 SQLite
+- 49ms 完成全量构建（冷启动），产出 332KB 数据库文件
+- **Markdown 为 source of truth**：修改 Markdown 后运行 `python build_sqlite.py` 重建
+- 数据库路径通过环境变量 `ZIXUNXIA_DB_PATH` 可配置，默认 `撑伞侠知识库.db`
+
+**数据库规模**：18 张表，1,076 行
+
+| 表名 | 行数 | 来源 | 说明 |
+|:--|:--|:--|:--|
+| `schools` | 177 | 院校评估库 | 含 is_985 / is_211 / is_double_first_class / dfc_tier 标签 |
+| `school_major_strength` | **506** | 部委直属 + 专业卡片典型方向 | **核心关联表**：院校↔专业↔方向说明 |
+| `ministry_affiliations` | 109 | 部委直属院校速查 | 14 部委系统 × 代表院校 × 强势专业 |
+| `major_branches` | 109 | 专业内部分叉速查 | 27 个专业 × 各 3-5 个方向 |
+| `major_cards` | 15 | 专业决策库 | 6 字段（培养/就业/深造/报考/院校依赖/典型方向） |
+| `major_name_traps` | 45 | 专业决策库 | 60+ 名称误区（真实门类/常见误解/关键说明） |
+| `major_categories` | 12 | 专业决策库 | 12 学科门类速查 |
+| `province_filling_config` | 23 | 填报规则库 | 各省志愿模式/数量/调剂风险 |
+| `filling_traps` | 7 | 填报规则库 | 大类招生/专业组打包/转专业承诺等陷阱 |
+| `city_tiers` | 5 | 城市产业库 | 五层城市格局 |
+| `city_types` | 5 | 城市产业库 | 五种产业类型分类 |
+| `province_industries` | 11 | 城市产业库 | 重点省份产业集群 |
+| `major_city_match` | 13 | 城市产业库 | 专业方向 → 首选城市特征 |
+| `salary_sources` | 4 | 行业薪资库 | 薪资查询数据源 |
+| `employment_factors` | 6 | 行业薪资库 | 6 因素就业分析框架 |
+| `tool_references` | 17 | 行业薪资库 | 推荐给考生 + 咨询侠用的工具 |
+| `bilibili_resources` | 9 | 行业薪资库 | B 站专业解读视频 |
+| `new_majors_2025` | 3 | 专业决策库 | 2025 年新增专业方向 |
+
+**核心数据提取逻辑**：
+
+`school_major_strength` 表的数据来自两个独立来源的交叉提取：
+
+1. **部委直属关系**（109 条 → 展开为 ~400 条院校-专业关联）
+   - 从 "电子工业部 → 成电/西电/杭电 → 电子信息/计算机/自动化" 拆解
+   - 院校名按顿号/逗号拆分（含去括号），专业方向按斜杠拆分
+   - source 标记为 `ministry_affiliation`
+
+2. **专业卡片"典型方向"字段**（69 条）
+   - 从 "清华：智能软件工程；浙大：AI驱动+金融科技" 提取
+   - 正则匹配 `学校名：方向描述` 模式
+   - source 标记为 `major_card_typical_direction`
+
+#### 二、新增 MCP 工具（2 个，总数 8 → 10）
+
+**`query_school_by_major(major_name, min_tier?)`** — 专业→强校反向查询
+
+- 输入专业名，返回全国哪些院校是该专业的强校
+- 数据来源：`school_major_strength` 表 + `ministry_affiliations` 表补充
+- 支持 `min_tier` 过滤（985 / 211 / 双一流 / 全部）
+- 精确匹配优先，无结果时自动模糊匹配
+- 返回：院校名、层级标签（985/211/双一流）、专业方向说明、数据来源
+
+**`query_major_by_school(school_name)`** — 院校→强势专业正向查询
+
+- 输入院校名，返回该校有哪些强势专业
+- 数据来源：`school_major_strength` 表 + `ministry_affiliations` 表
+- 返回：专业名、方向说明、数据来源、院校层级信息
+
+**技术实现**：
+- SQLite 查询层直接写在 `server.py` 中（`_get_db()` + 2 个 handler）
+- 数据库不存在时返回明确错误提示：`"数据库未构建，请先运行 build_sqlite.py"`
+- 与现有 8 个内存 dict 工具共存，互不影响
+
+#### 三、数据解析器（1 个，复用 6 个）
+
+- `build_sqlite.py` 复用了全部 6 个现有解析器：`major_decision` / `major_branches` / `school_evaluation` / `city_industry` / `filling_rules` / `salary_tools`
+- 新增院校名拆分逻辑（`_split_school_names`）和专业方向提取逻辑（`_extract_school_direction_pairs`）
+- 支持幂等重建：每次运行先删除旧库再重新构建
+
+### 🔄 变更
+
+**mcp-server/server.py**：
+- 新增 `import sqlite3` + `from config import DB_PATH`
+- `list_tools()`：新增 2 个 Tool 定义（含完整 inputSchema）
+- `call_tool()`：handlers dict 新增 2 个条目
+- 新增 `_get_db()` — SQLite 连接工厂（row_factory=sqlite3.Row）
+- 新增 `_query_school_by_major()` — 双表查询 + 层级过滤 + 精确/模糊回退
+- 新增 `_query_major_by_school()` — 双表查询 + 部委补充
+- 新增 `_school_tier_label()` — 从数据库行推断院校层级标签
+- 总计 +170 行
+
+**SKILL.md**：
+- 「数据查询工具（MCP）」表格 8→10 行，新增 2 个工具及示例
+
+**config.py**：
+- 已有 `DB_PATH` 配置（`SKILL_DIR / "撑伞侠知识库.db"`），本次未改动
+
+### 🐛 修复
+
+**文档修正 — 移除虚假前提**：
+- 确认 `撑伞侠知识库.db`（41364 行 rel_school_major 表）实际不存在
+- `PROJECT_STATUS.md` 已知问题 #3 从 "41364 行表存在但未集成" 改为 "专业-院校反向查询能力缺失"
+- 移除所有 "Phase 5 SQLite 条件触发" 相关条目
+- `CLAUDE.md` 核心边界规则 #4 从 "等有 .db 文件再说" 改为 "数据源确定后再设计 SQLite 方案"
+- `CHANGELOG.md` v2.5.0 路线图行从 "待规划" 改为实际完成内容
+
+### 📄 文档
+
+- `mcp-server/build_sqlite.py` — 新建（~370 行）
+- `PROJECT_STATUS.md` — 架构/技术栈/已完成功能/计划中/已知问题/数据流 全部更新
+- `UPDATES.md` — 新增 Phase 5 完成任务条目 + 文档修正条目
+- `CHANGELOG.md` — 本条目（替换旧版简短版本）
+- `SKILL.md` — 工具速查表 +2 行
+- `CLAUDE.md` — 版本号 v2.4.0→v2.5.0 + 边界规则 #4 更新
+
+---
+
+## [v2.3.1] — 2026-06-25
+
+### MCP 知识查询服务器 + SKILL.md 精简
+
+**首个 MCP 混合架构版本**：数据层走 MCP 工具（结构化查询），方法论层走文件读取（始终在场的行为约束）。
+
+---
+
+### ✨ 新增
+
+#### MCP Server — 本地知识库查询（8 个工具）
+- **技术栈**：Python 3.14 + `mcp` SDK v1.28.0 + stdio 传输
+- **架构**：启动时全量解析 6 个 Markdown 数据文件（88-163ms）→ JSON 缓存（57KB）→ 后续查询 ~0ms
+- **注册方式**：`.mcp.json` 文件，Claude Code 自动管理进程生命周期
+
+| 工具 | 功能 | 查询方式 |
+|:--|:--|:--|
+| `query_major_detail` | 专业完整决策卡片（培养计划/就业/深造/报考条件） | 精确 → 模糊 → 建议 三级返回 |
+| `query_major_branches` | 专业内部分叉方向（27 个专业） | 同上 |
+| `search_majors` | 按门类/关键词/院校依赖/深造需求筛选专业 | 多条件组合过滤 |
+| `query_city_industry` | 城市/省份产业集群（31 省 + 5 层格局） | 省份→城市层级→城市类型 三级查表 |
+| `query_school_info` | 院校分层/部委直属/推免率（5 种查询类型） | tiers/lists/ministries/tuimian/framework |
+| `query_rules` | 填报规则/省模式（23 省 + 13 个主题） | 主题查询 + 省份查询 |
+| `query_career_data` | 薪资/就业框架/工具速查/行业趋势（8 维度） | 按 query_type 取值 |
+| `search_knowledge_base` | 兜底全文关键词搜索 | 跨专业/院校/城市/规则 |
+
+#### 数据解析器（6 个）
+- `major_branches.py` — 专业内部分叉（27 专业，9ms）
+- `major_decision.py` — 专业决策库（15 卡片 + 12 门类 + 45 误区）
+- `city_industry.py` — 城市产业库（31 省 + 5 层 + 5 类型 + 13 匹配）
+- `school_evaluation.py` — 院校评估库（985/211/双一流/14 部委）
+- `filling_rules.py` — 填报规则库（23 省 + 7 类规则）
+- `salary_tools.py` — 薪资与工具箱（8 数据维度）
+
+### 🔄 变更
+
+- **SKILL.md**：1191 行 → 1155 行（-36 行 / -3.0%）
+  - 删除「素材源」章节（41 行）
+  - 删除「知识库使用指南」章节（24 行）
+  - 新增「数据查询工具（MCP）」章节（35 行）
+- **数据查询方式**：`Read 知识库/数据层/XX.md` → `mcp__zixunxia-knowledge__query_xxx`
+- **上下文基线**：~245KB 峰值 → ~161KB + 按需 MCP（-34%）
+
+### 🧪 测试
+- 64/64 项测试全部通过（解析器 21 + 工具逻辑 23 + 数据完整性 4 + 回归 11 + 性能 6）
+- `mcp-1.28.0` 在 Python 3.14.4 兼容性验证通过
+
+### 📄 文档
+- `PROJECT_STATUS.md` — 新建（项目状态 + 架构 + 进度 + 已知问题 + 决策记录）
+- `UPDATES.md` — 新建（倒序时间线更新日志）
+- `CLAUDE.md` — 新建（项目规则 + 协议）
+- `plans/mcp-skill-plan-peppy-duckling.md` — MCP 优化计划
+
+---
+
+## [v2.3.0] — 2026-06-18
+
+### 纯 Skill 版本基线
+
+- 完整三大模块：咨询前（Prompt0/1/2）+ 咨询中（五维度话术引导）+ 咨询后（四步复盘）
+- 知识库 13 份 Markdown 文件（数据层 6 份 83KB + 方法论 7 份 103KB）
+- Python DOCX 导出脚本（专业推荐/复盘报告）
+- 腾讯文档/腾讯问卷 MCP 集成（mcporter HTTP 模式）
+- 人机感检测（humanizer.md 12 类规则）
+- 考生档案管理（MD 文件 + checkbox 进度追踪）
+
+---
+
+## [v2.2.5] — 更早版本
+
+### 初始 Skill 版本
+
+- 基础咨询流程：咨询前分析 → 咨询中话术 → 咨询后复盘
+- 手动触发词驱动（30+ 个指令）
+- 知识库全量 Read 文件方式查询
+- 无 MCP 集成
+
+---
+
+## 版本路线图
+
+| 版本 | 日期 | 核心变化 | 架构特征 |
+|:--|:--|:--|:--|
+| v2.2.5 | 更早 | 初始版本 | 纯 Skill，全文 Read |
+| v2.3.0 | 2026-06-18 | 功能完善 | 纯 Skill，13 文件知识库 |
+| **v2.3.1** | 2026-06-25 | **MCP 知识查询** | **混合架构**：数据 MCP + 方法论文件 |
+| **v2.4.0** | **2026-06-26** | **Goal State Agent Loop** | **自主推进**：目标驱动 + 人工审批 |
+| **v2.5.0** | **2026-06-26** | **SQLite + 院校专业双向查询** | **18表/1076行/332KB，10 MCP工具** |
+| **v2.6.0** | **2026-06-26** | **LangGraph 批量并行分析** | **双层图 fan-out，每考生独立 Agent，CSV→Prompt0/1/2 并行** |
+
+---
+
+## 已知问题演化史
+
+记录项目自 v2.2.5 以来识别和解决的 7 个结构性问题，追溯每个问题的出现版本、根因、解决版本和解决方式。
+
+### #1 上下文膨胀 — ✅ 已优化
+
+| 项 | 内容 |
+|:--|:--|
+| **出现版本** | v2.2.5（项目诞生即存在） |
+| **根因** | 186KB 知识库全量通过 `Read` 文件注入 LLM 上下文，40 分钟咨询后期注意力衰减 |
+| **v2.3.1 缓解** | 数据层走 8 个 MCP 工具按需查询（2-5KB/次），替代全文 Read。上下文峰值 ~255KB → ~161KB（-34%） |
+| **v2.5.0 根治** | SKILL.md 去重压缩 1305→1141 行（-12.6%），数据全部走 MCP+SQLite |
+| **最终状态** | ✅ 已优化。SKILL.md 1141 行 + 10 个 MCP 工具按需查询 + SQLite 结构化返回 |
+
+### #2 数据幻觉风险 — ✅ 已解决
+
+| 项 | 内容 |
+|:--|:--|
+| **出现版本** | v2.2.5（项目诞生即存在） |
+| **根因** | LLM 凭训练数据记忆回答专业数据（培养课程/院校推免率/薪资/填报规则），无结构化查询机制 |
+| **v2.3.1 解决** | 8 个 MCP 工具上线——AI 不再凭记忆回答，而是调用工具从解析后的知识库获取确定数据。工具返回 "not_found" 时 AI 被告知"没查到"而非"编一个" |
+| **v2.5.0 加固** | SQLite 化确保查询一致性；8→10 工具覆盖双向院校查询 |
+| **最终状态** | ✅ 已解决。从 v2.3.1 起结构性消除幻觉风险 |
+
+### #3 专业-院校反向查询能力缺失 — ⚠️ 部分解决
+
+| 项 | 内容 |
+|:--|:--|
+| **出现版本** | v2.3.1（首次具备正向查询能力时暴露） |
+| **根因** | 8 个 MCP 工具全部是正向查询（已知院校查它有什么），无法反向查"某专业在哪些院校是强校" |
+| **v2.5.0 解决** | 从部委直属关系（109条→400+）和专业卡片典型方向（69条）提取 506 条院校-专业关联，新增 `query_school_by_major` 和 `query_major_by_school` 两个 MCP 工具 |
+| **局限** | 506 行关联覆盖不全（"软件工程"只查到 4 所强校，全国实际 530+ 所）。增强版需外部全量数据源 |
+| **最终状态** | ⚠️ 部分解决。基础查询已可用，全量覆盖待外部数据 |
+
+### #4 DeepSeek 工具调用质量未知 — ⚠️ 未被测试
+
+| 项 | 内容 |
+|:--|:--|
+| **出现版本** | v2.3.1（首个 MCP 版本上线时识别） |
+| **根因** | LLM 后端为 DeepSeek v4-pro（Anthropic 兼容端点），其 function calling 在 Anthropic 工具调用规范下的准确率未经系统性测试。v2.4.0 的 Goal State Agent Loop 进一步依赖 AI 自主决策调用哪些工具 |
+| **为何未解决** | 用户明确跳过 P1a（工具调用质量测试）。该测试需实际咨询场景验证，单元测试无法替代 |
+| **风险** | 工具调用可能被跳过或用错参数 → 专业推荐不准、填报规则错误 |
+| **最终状态** | ⚠️ 唯一剩余结构性风险。建议实际咨询中观察工具调用日志 |
+
+### #5 Python 3.14 兼容性 — ✅ 已解决
+
+| 项 | 内容 |
+|:--|:--|
+| **出现版本** | v2.3.1（MCP Server 搭建时识别） |
+| **根因** | `mcp` SDK 官方支持 Python 3.10-3.12，Python 3.14 是最新版本，兼容性未知 |
+| **v2.3.1 当天解决** | Phase 1 实施时直接验证：`pip install mcp` → mcp-1.28.0，import 成功，64/64 测试通过 |
+| **最终状态** | ✅ 已解决。mcp-1.28.0 在 Python 3.14.4 正常运行 |
+
+### #6 Windows 编码 — ✅ 已解决
+
+| 项 | 内容 |
+|:--|:--|
+| **出现版本** | v2.3.1（MCP Server 搭建时识别，Windows 特有） |
+| **根因** | `_json()` 用 `json.dumps(ensure_ascii=False)` 输出中文，Windows cmd.exe/PowerShell 默认 GBK 编码无法正确编码 stdout |
+| **v2.5.0 解决** | `server.py` main() 加 UTF-8 强制（`sys.stdout.reconfigure(encoding='utf-8')` + `TextIOWrapper` 兜底）。`encoding_check.py` 独立诊断脚本 |
+| **最终状态** | ✅ 已解决。代码层面已修复。真实 Claude Code MCP 环境待实际验证 |
+
+### #7 Goal State 自动推进可靠性 — ⚠️ 未被测试
+
+| 项 | 内容 |
+|:--|:--|
+| **出现版本** | v2.4.0（Goal State Agent Loop 引入时识别） |
+| **根因** | AI 每 turn 需正确执行"读 goal_state.json → 判断未完成目标 → 调 MCP → 输出话术 → 写完成状态"循环。DeepSeek 在此循环中的可靠性未经验证 |
+| **为何未解决** | 与 #4 同源——都是 DeepSeek 模型能力未知。需实际咨询场景验证 |
+| **风险** | AI 可能跳过维度、重复输出、疲惫信号误判 → 咨询流程偏离 |
+| **最终状态** | ⚠️ 与 #4 同源风险。建议实际咨询中首次使用密切观察 |
+
+### 总结
+
+| # | 问题 | 出现 | 解决 | 归宿 |
+|:--|:--|:--|:--|:--|
+| 1 | 上下文膨胀 | v2.2.5 | v2.3.1 + v2.5.0 | ✅ 两步根治 |
+| 2 | 数据幻觉 | v2.2.5 | v2.3.1 | ✅ MCP结构性消除 |
+| 3 | 反向查询缺失 | v2.3.1 | v2.5.0 | ⚠️ 基础版可用 |
+| 4 | DeepSeek工具调用 | v2.3.1 | — | ⚠️ 未被测试 |
+| 5 | Python 3.14 兼容 | v2.3.1 | v2.3.1 | ✅ 当天验证 |
+| 6 | Windows编码 | v2.3.1 | v2.5.0 | ✅ 代码修复 |
+| 7 | Goal State可靠性 | v2.4.0 | — | ⚠️ 同#4 |
+
+---
+
+## 术语对照
+
+| 术语 | 说明 |
+|:--|:--|
+| **Skill** | Claude Code 的 SKILL.md 编排机制 — 定义 AI 行为规则、触发词、工作流 |
+| **MCP** | Model Context Protocol — AI 调用外部工具的标准化协议 |
+| **Goal State** | 目标状态 — 定义"什么算完成"的结构化字段，AI 自主检查并推进 |
+| **Agent Loop** | Agent 循环 — AI 每个 turn 读取状态 → 调工具 → 输出内容 → 更新状态 → 校验 → 重复 |
+| **人工审批点** | Human-in-the-loop 节点 — AI 暂停等人确认后才能继续 |
+| **mcporter** | Node.js CLI 工具 — 将 HTTP API 暴露为 MCP 兼容端点 |
+| **五维度** | 咨询侠专业讲解方法论 — 培养计划/学校要求/深造要求/硬性要求/赚钱能力 |

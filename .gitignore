@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment & secrets
+.env
+
+# MCP server cache
+mcp-server/cache/
+
+# Student case data (privacy)
+cases/*/
+# Keep batch summaries and test inputs
+!cases/_batch_summary_*.md
+!cases/_test_batch_input.*
+
+# Temp files
+*.tmp_stdin.json
+tencent-docs/.tmp_stdin.json
+tencent-survey-1.1.1/.tmp_stdin.json
+
+# OS
+.DS_Store
+Thumbs.db

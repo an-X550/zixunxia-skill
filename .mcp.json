@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "zixunxia-knowledge": {
+      "command": "python",
+      "args": ["./mcp-server/server.py"],
+      "env": {
+        "ZIXUNXIA_SKILL_DIR": "."
+      }
+    }
+  }
+}

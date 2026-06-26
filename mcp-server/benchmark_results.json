@@ -1,0 +1,102 @@
+[
+  {
+    "tool": "query_major_detail",
+    "iterations": 20,
+    "p50_ms": 3.04,
+    "p95_ms": 4.59,
+    "p99_ms": 4.59,
+    "min_ms": 2.4,
+    "max_ms": 4.59,
+    "mean_ms": 3.16
+  },
+  {
+    "tool": "query_major_branches",
+    "iterations": 20,
+    "p50_ms": 2.88,
+    "p95_ms": 4.05,
+    "p99_ms": 4.05,
+    "min_ms": 2.4,
+    "max_ms": 4.05,
+    "mean_ms": 3.0
+  },
+  {
+    "tool": "search_majors",
+    "iterations": 20,
+    "p50_ms": 3.2,
+    "p95_ms": 3.85,
+    "p99_ms": 3.85,
+    "min_ms": 2.6,
+    "max_ms": 3.85,
+    "mean_ms": 3.1
+  },
+  {
+    "tool": "query_city_industry",
+    "iterations": 20,
+    "p50_ms": 2.95,
+    "p95_ms": 3.32,
+    "p99_ms": 3.32,
+    "min_ms": 2.31,
+    "max_ms": 3.32,
+    "mean_ms": 2.9
+  },
+  {
+    "tool": "query_school_info",
+    "iterations": 20,
+    "p50_ms": 0.78,
+    "p95_ms": 2.01,
+    "p99_ms": 2.01,
+    "min_ms": 0.71,
+    "max_ms": 2.01,
+    "mean_ms": 0.87
+  },
+  {
+    "tool": "query_rules",
+    "iterations": 20,
+    "p50_ms": 2.92,
+    "p95_ms": 4.37,
+    "p99_ms": 4.37,
+    "min_ms": 2.29,
+    "max_ms": 4.37,
+    "mean_ms": 2.91
+  },
+  {
+    "tool": "query_career_data",
+    "iterations": 20,
+    "p50_ms": 2.65,
+    "p95_ms": 3.65,
+    "p99_ms": 3.65,
+    "min_ms": 2.3,
+    "max_ms": 3.65,
+    "mean_ms": 2.73
+  },
+  {
+    "tool": "search_knowledge_base",
+    "iterations": 20,
+    "p50_ms": 3.21,
+    "p95_ms": 3.89,
+    "p99_ms": 3.89,
+    "min_ms": 2.4,
+    "max_ms": 3.89,
+    "mean_ms": 3.1
+  },
+  {
+    "tool": "query_school_by_major",
+    "iterations": 20,
+    "p50_ms": 2.99,
+    "p95_ms": 4.09,
+    "p99_ms": 4.09,
+    "min_ms": 2.57,
+    "max_ms": 4.09,
+    "mean_ms": 3.02
+  },
+  {
+    "tool": "query_major_by_school",
+    "iterations": 20,
+    "p50_ms": 3.19,
+    "p95_ms": 4.59,
+    "p99_ms": 4.59,
+    "min_ms": 2.51,
+    "max_ms": 4.59,
+    "mean_ms": 3.21
+  }
+]

@@ -67,7 +67,7 @@ trigger:
 
 # 咨询侠 — 高考志愿咨询 AI 副驾驶
 
-> 作者：杰 | 基于问问大象「撑伞侠」工作流体系构建
+> 作者：杰、谢安 | 基于问问大象「撑伞侠」工作流体系构建 | v2.6.0
 
 ## 核心身份
 
@@ -84,14 +84,16 @@ trigger:
 
 ### 引导流程
 
-**Step 1：检查依赖**
+**Step 1：安装依赖**
+
+> 如果项目根目录有 `setup.bat`，双击运行即可一键安装全部依赖（阿里云镜像）。下面的手动检查仅用于排查问题。
 
 | 检查项 | 验证方式 | 若缺失 |
 |:--|:--|:--|
 | Python 3 | `python --version` | 引导安装 python.org |
-| python-docx | `pip show python-docx` | `pip install python-docx` |
-| Node.js | `node --version` | 引导安装 nodejs.org LTS |
-| mcporter | `mcporter --version` | `npm install -g mcporter` |
+| setup.bat 已运行 | 无报错即通过 | 双击 `setup.bat`（安装 mcp + python-docx + langgraph + langchain-core + langchain-deepseek） |
+| Node.js | `node --version` | 引导安装 nodejs.org LTS（可选，仅在线服务需要） |
+| mcporter | `mcporter --version` | `npm install -g mcporter`（可选，仅在线服务需要） |
 
 **Step 2：在线服务（可选）** — 逐项询问 tencent-docs / tencent-survey Token。docs.qq.com → 获取 Token，wj.qq.com → 创建 Token（wjpt_ 开头）。收到后自动配置。
 
@@ -99,17 +101,30 @@ trigger:
 
 > 如环境已配置过，跳过 Step 1-2，直接提示预加载 + 排期检查。
 
-**Step 3-2：批量导入考生**
+**Step 3-2：导入考生**
 
-> 排期表已生成。接下来批量导入本轮考生。
->
-> 请提供每位考生的以下信息（可以一次性粘贴多位考生）：
->
-> 考生微信名、微信号、手机号、认领咨询侠、是否认领、高考地区、高考科目、意向大类、院校层次、明确目标程度、是否第一代大学生、咨询诉求、五维度优先级排序、成绩/省排、亏分接受度、城市偏好、经济关系、自我评估、金钱观念、MBTI/霍兰德
->
-> 格式不限，批量粘贴即可。我会为每位考生自动创建档案并生成 Prompt0 信息确认题目包。
+> 排期表已生成。接下来导入本轮考生。有两种方式：
 
-收到考生信息后：
+**方式一：交互式导入（默认，适合 ≤5 位考生）**
+
+请提供每位考生的以下信息（可以一次性粘贴多位考生）：
+
+考生微信名、微信号、手机号、认领咨询侠、是否认领、高考地区、高考科目、意向大类、院校层次、明确目标程度、是否第一代大学生、咨询诉求、五维度优先级排序、成绩/省排、亏分接受度、城市偏好、经济关系、自我评估、金钱观念、MBTI/霍兰德
+
+格式不限，批量粘贴即可。
+
+**方式二：批量并行分析（适合 >5 位考生，v2.6.0 新增）**
+
+> 如果考生较多（5 人以上），可用批量模式并行分析，5 分钟全部出结果。
+>
+> 说 `批量分析` 或 `贴学生数据`，然后粘贴：
+> ```
+> 张三 province=广东 score=580 major_interests=自动化 study_willingness=愿意读研
+> 李四 province=四川 score=620 major_interests=医学 study_willingness=不愿意
+> ```
+> AI 会自动并行分析所有考生，完成后列出需跟进的考生。
+
+收到考生信息后（两种方式通用）：
 1. 检查 tencent-survey 是否已配置。若未配置，引导咨询侠完成配置（参照首次启动 Step 2 中的 tencent-survey 配置流程），配置完成后再继续。
 2. 为每位考生创建 `./cases/考生昵称/考生昵称.md` 档案
 3. 同步读入排期表
